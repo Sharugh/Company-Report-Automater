@@ -30,51 +30,49 @@ if process and bpcl_pdfs:
                 if text:
                     all_text += text + "\n"
 
-                # Try to find tables
+                # Find tables
                 tables = page.extract_tables()
                 for table in tables:
                     for row in table:
-                        # SAFELY join: skip None
-                        joined = " ".join([cell for cell in row if cell]).lower()
+                        # ✅ FULLY SAFE JOIN & TYPE HANDLING
+                        if row and isinstance(row, list):
+                            safe_cells = [str(cell) for cell in row if cell is not None]
+                            if not safe_cells:
+                                continue  # skip empty rows
+                            joined = " ".join(safe_cells).lower()
 
-                        if "crude throughput" in joined:
-                            for cell in row:
-                                if cell:
+                            if "crude throughput" in joined:
+                                for cell in safe_cells:
                                     m = re.search(r"([\d\.]+)", cell)
                                     if m:
                                         table_data["Crude Throughput (MMT)"] = m.group(1)
-                        if "distillate yield" in joined:
-                            for cell in row:
-                                if cell:
+                            if "distillate yield" in joined:
+                                for cell in safe_cells:
                                     m = re.search(r"([\d\.]+)", cell)
                                     if m:
                                         table_data["Distillate Yield (%)"] = m.group(1)
-                        if "sko" in joined:
-                            for cell in row:
-                                if cell:
+                            if "sko" in joined:
+                                for cell in safe_cells:
                                     m = re.search(r"([\d\.]+)", cell)
                                     if m:
                                         table_data["SKO (MMT)"] = m.group(1)
-                        if "atf" in joined:
-                            for cell in row:
-                                if cell:
+                            if "atf" in joined:
+                                for cell in safe_cells:
                                     m = re.search(r"([\d\.]+)", cell)
                                     if m:
                                         table_data["ATF (MMT)"] = m.group(1)
-                        if "others" in joined:
-                            for cell in row:
-                                if cell:
+                            if "others" in joined:
+                                for cell in safe_cells:
                                     m = re.search(r"([\d\.]+)", cell)
                                     if m:
                                         table_data["Others (MMT)"] = m.group(1)
-                        if "exports" in joined:
-                            for cell in row:
-                                if cell:
+                            if "exports" in joined:
+                                for cell in safe_cells:
                                     m = re.search(r"([\d\.]+)", cell)
                                     if m:
                                         table_data["Exports (MMT)"] = m.group(1)
 
-        # Extract from plain text for fields not in tables
+        # Extract from plain text for other fields
         text_data = {
             "Sl.No": None,
             "Company": "BPCL",
@@ -109,7 +107,6 @@ if process and bpcl_pdfs:
             "LPG Consumers (million)": re.search(r"LPG Consumers.*?([\d\.]+)", all_text)
         }
 
-        # Combine: prefer table data if present
         combined = {}
         for key in text_data.keys():
             if key in table_data and table_data[key] is not None:
@@ -125,7 +122,7 @@ if process and bpcl_pdfs:
 
         return combined
 
-
+    # Process all PDFs
     bpcl_rows = []
     for f in bpcl_pdfs:
         bpcl_rows.append(parse_bpcl_pdf(f))
@@ -133,6 +130,7 @@ if process and bpcl_pdfs:
     bpcl_df = pd.DataFrame(bpcl_rows)
     bpcl_df["Sl.No"] = range(1, len(bpcl_df) + 1)
 
+    # Export to Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         bpcl_df.to_excel(writer, sheet_name="BPCL", index=False)
@@ -147,4 +145,3 @@ if process and bpcl_pdfs:
 else:
     if process:
         st.warning("Please upload at least one BPCL PDF.")
-
