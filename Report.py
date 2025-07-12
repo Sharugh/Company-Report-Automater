@@ -10,7 +10,7 @@ st.title("📄 BPCL Quarterly PDF Data Extractor")
 
 st.write("""
 Upload BPCL quarterly PDF report(s).  
-This app will extract KPIs using tables & text, then generate a combined Excel file.
+This app will extract key performance indicators using **tables and plain text**, then generate a combined Excel file.
 """)
 
 # Upload BPCL PDFs
@@ -34,38 +34,45 @@ if process and bpcl_pdfs:
                 tables = page.extract_tables()
                 for table in tables:
                     for row in table:
-                        # Look for rows matching keys
-                        joined = " ".join(row).lower()
+                        # SAFELY join: skip None
+                        joined = " ".join([cell for cell in row if cell]).lower()
+
                         if "crude throughput" in joined:
                             for cell in row:
-                                m = re.search(r"([\d\.]+)", cell)
-                                if m:
-                                    table_data["Crude Throughput (MMT)"] = m.group(1)
+                                if cell:
+                                    m = re.search(r"([\d\.]+)", cell)
+                                    if m:
+                                        table_data["Crude Throughput (MMT)"] = m.group(1)
                         if "distillate yield" in joined:
                             for cell in row:
-                                m = re.search(r"([\d\.]+)", cell)
-                                if m:
-                                    table_data["Distillate Yield (%)"] = m.group(1)
+                                if cell:
+                                    m = re.search(r"([\d\.]+)", cell)
+                                    if m:
+                                        table_data["Distillate Yield (%)"] = m.group(1)
                         if "sko" in joined:
                             for cell in row:
-                                m = re.search(r"([\d\.]+)", cell)
-                                if m:
-                                    table_data["SKO (MMT)"] = m.group(1)
+                                if cell:
+                                    m = re.search(r"([\d\.]+)", cell)
+                                    if m:
+                                        table_data["SKO (MMT)"] = m.group(1)
                         if "atf" in joined:
                             for cell in row:
-                                m = re.search(r"([\d\.]+)", cell)
-                                if m:
-                                    table_data["ATF (MMT)"] = m.group(1)
+                                if cell:
+                                    m = re.search(r"([\d\.]+)", cell)
+                                    if m:
+                                        table_data["ATF (MMT)"] = m.group(1)
                         if "others" in joined:
                             for cell in row:
-                                m = re.search(r"([\d\.]+)", cell)
-                                if m:
-                                    table_data["Others (MMT)"] = m.group(1)
+                                if cell:
+                                    m = re.search(r"([\d\.]+)", cell)
+                                    if m:
+                                        table_data["Others (MMT)"] = m.group(1)
                         if "exports" in joined:
                             for cell in row:
-                                m = re.search(r"([\d\.]+)", cell)
-                                if m:
-                                    table_data["Exports (MMT)"] = m.group(1)
+                                if cell:
+                                    m = re.search(r"([\d\.]+)", cell)
+                                    if m:
+                                        table_data["Exports (MMT)"] = m.group(1)
 
         # Extract from plain text for fields not in tables
         text_data = {
@@ -85,10 +92,10 @@ if process and bpcl_pdfs:
             "MS Sales (MMT)": re.search(r"MS Sales.*?([\d\.]+)", all_text),
             "HSD Sales (MMT)": re.search(r"HSD Sales.*?([\d\.]+)", all_text),
             "Pipeline Throughput (MMT)": re.search(r"Pipeline Throughput.*?([\d\.]+)", all_text),
-            "Gross Margins ($/bbl)": re.search(r"Gross Margins.*?([\d\.]+)", all_text),
-            "Gross Margins - MR ($/bbl)": re.search(r"Gross Margins - MR.*?([\d\.]+)", all_text),
-            "Gross Margins - KR ($/bbl)": re.search(r"Gross Margins - KR.*?([\d\.]+)", all_text),
-            "Gross Margins - BR ($/bbl)": re.search(r"Gross Margins - BR.*?([\d\.]+)", all_text),
+            "Gross Margins ($/bbl)": re.search(r"Gross Margins[^$]*\$?.*?([\d\.]+)", all_text),
+            "Gross Margins - MR ($/bbl)": re.search(r"Gross Margins - MR[^$]*\$?.*?([\d\.]+)", all_text),
+            "Gross Margins - KR ($/bbl)": re.search(r"Gross Margins - KR[^$]*\$?.*?([\d\.]+)", all_text),
+            "Gross Margins - BR ($/bbl)": re.search(r"Gross Margins - BR[^$]*\$?.*?([\d\.]+)", all_text),
             "Revenue from operations (₹ Crores)": re.search(r"Revenue from operations.*?₹\s*([\d,]+)", all_text),
             "Cost of materials consumed (₹ Crores)": re.search(r"Cost of materials.*?₹\s*([\d,]+)", all_text),
             "Purchase of stock-in-trade (₹ Crores)": re.search(r"Purchase of stock.*?₹\s*([\d,]+)", all_text),
@@ -105,7 +112,7 @@ if process and bpcl_pdfs:
         # Combine: prefer table data if present
         combined = {}
         for key in text_data.keys():
-            if key in table_data:
+            if key in table_data and table_data[key] is not None:
                 combined[key] = table_data[key]
             else:
                 v = text_data[key]
@@ -140,3 +147,4 @@ if process and bpcl_pdfs:
 else:
     if process:
         st.warning("Please upload at least one BPCL PDF.")
+
