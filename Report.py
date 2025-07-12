@@ -4,202 +4,139 @@ import pandas as pd
 import re
 from io import BytesIO
 
-st.set_page_config(page_title="OMC Quarterly Data Extractor")
+st.set_page_config(page_title="📄 BPCL Quarterly PDF Extractor")
 
-st.title("📊 Quarterly PDF Data Extractor for OMCs (HPCL, BPCL, IOCL, RIL)")
+st.title("📄 BPCL Quarterly PDF Data Extractor")
 
 st.write("""
-Upload quarterly PDF reports for each company below.  
-The app will extract the required KPIs, merge all data, and generate a combined Excel file.
+Upload BPCL quarterly PDF report(s).  
+This app will extract KPIs using tables & text, then generate a combined Excel file.
 """)
 
-# Uploaders for each company
-hpcl_pdfs = st.file_uploader("📄 Upload HPCL PDF(s)", type=["pdf"], accept_multiple_files=True)
-bpcl_pdfs = st.file_uploader("📄 Upload BPCL PDF(s)", type=["pdf"], accept_multiple_files=True)
-iocl_pdfs = st.file_uploader("📄 Upload IOCL PDF(s)", type=["pdf"], accept_multiple_files=True)
-ril_pdfs = st.file_uploader("📄 Upload RIL PDF(s)", type=["pdf"], accept_multiple_files=True)
+# Upload BPCL PDFs
+bpcl_pdfs = st.file_uploader("Upload BPCL PDF(s)", type=["pdf"], accept_multiple_files=True)
 
-process = st.button("🚀 Process PDFs & Generate Excel")
+process = st.button("🚀 Process BPCL PDFs")
 
-if process:
-    def parse_pdf(pdf_file, company):
+if process and bpcl_pdfs:
+
+    def parse_bpcl_pdf(pdf_file):
+        all_text = ""
+        table_data = {}
+
         with pdfplumber.open(pdf_file) as pdf:
-            text = ""
             for page in pdf.pages:
-                text += page.extract_text() + "\n"
+                text = page.extract_text()
+                if text:
+                    all_text += text + "\n"
 
-        if company == "HPCL":
-            data = {
-                "Sl.No": None,
-                "Company": "HPCL",
-                "Fiscal Year": re.search(r"Fiscal Year\s*:\s*(\d{4}-\d{4})", text),
-                "Quarter": re.search(r"Quarter\s*:\s*(Q[1-4])", text),
-                "Duration": re.search(r"Duration\s*:\s*(.*?)\n", text),
-                "Date": re.search(r"Date\s*:\s*([\d-]+)", text),
-                "Crude Throughput (MMT)": re.search(r"Crude Throughput.*?([\d\.]+)", text),
-                "Utilisation (%)": re.search(r"Utilisation.*?([\d\.]+)", text),
-                "Domestic Sales (MMT)": re.search(r"Domestic Sales.*?([\d\.]+)", text),
-                "Exports (MMT)": re.search(r"Exports.*?([\d\.]+)", text),
-                "Pipeline Throughput (MMT)": re.search(r"Pipeline Throughput.*?([\d\.]+)", text),
-                "Gross Margins ($/bbl)": re.search(r"Gross Margins.*?([\d\.]+)", text),
-                "Sale of products (₹ Crores)": re.search(r"Sale of products.*?₹\s*([\d,]+)", text),
-                "Cost of material consumed (₹ Crores)": re.search(r"Cost of material.*?₹\s*([\d,]+)", text),
-                "Purchases of stock-in-trade (₹ Crores)": re.search(r"Purchases of stock.*?₹\s*([\d,]+)", text),
-                "Change in inventories (₹ Crores)": re.search(r"Change in inventories.*?₹\s*([\d,]+)", text),
-                "PBT (₹ Crores)": re.search(r"PBT.*?₹\s*([\d,]+)", text),
-                "Domestic market share of POL": re.search(r"Domestic market share.*?([\d\.]+)", text),
-                "Retail Outlets": re.search(r"Retail Outlets.*?([\d,]+)", text),
-                "LPG Distributionship": re.search(r"LPG Distributorship.*?([\d,]+)", text),
-                "SKO/LDO Dealership": re.search(r"SKO.*?([\d,]+)", text),
-                "Lube Distributors (Ind & Auto)": re.search(r"Lube Distributors.*?([\d,]+)", text),
-                "Mobile Dispensers": re.search(r"Mobile Dispensers.*?([\d,]+)", text),
-                "CNG facilities at ROs": re.search(r"CNG.*?([\d,]+)", text),
-                "EV Charging facilities at Ros": re.search(r"EV Charging.*?([\d,]+)", text),
-                "LPG Consumers (million)": re.search(r"LPG Consumers.*?([\d\.]+)", text)
-            }
+                # Try to find tables
+                tables = page.extract_tables()
+                for table in tables:
+                    for row in table:
+                        # Look for rows matching keys
+                        joined = " ".join(row).lower()
+                        if "crude throughput" in joined:
+                            for cell in row:
+                                m = re.search(r"([\d\.]+)", cell)
+                                if m:
+                                    table_data["Crude Throughput (MMT)"] = m.group(1)
+                        if "distillate yield" in joined:
+                            for cell in row:
+                                m = re.search(r"([\d\.]+)", cell)
+                                if m:
+                                    table_data["Distillate Yield (%)"] = m.group(1)
+                        if "sko" in joined:
+                            for cell in row:
+                                m = re.search(r"([\d\.]+)", cell)
+                                if m:
+                                    table_data["SKO (MMT)"] = m.group(1)
+                        if "atf" in joined:
+                            for cell in row:
+                                m = re.search(r"([\d\.]+)", cell)
+                                if m:
+                                    table_data["ATF (MMT)"] = m.group(1)
+                        if "others" in joined:
+                            for cell in row:
+                                m = re.search(r"([\d\.]+)", cell)
+                                if m:
+                                    table_data["Others (MMT)"] = m.group(1)
+                        if "exports" in joined:
+                            for cell in row:
+                                m = re.search(r"([\d\.]+)", cell)
+                                if m:
+                                    table_data["Exports (MMT)"] = m.group(1)
 
-        elif company == "BPCL":
-            data = {
-                "Sl.No": None,
-                "Company": "BPCL",
-                "Fiscal Year": re.search(r"Fiscal Year\s*:\s*(\d{4}-\d{4})", text),
-                "Quarter": re.search(r"Quarter\s*:\s*(Q[1-4])", text),
-                "Duration": re.search(r"Duration\s*:\s*(.*?)\n", text),
-                "Date": re.search(r"Date\s*:\s*([\d-]+)", text),
-                "Crude Throughput (MMT)": re.search(r"Crude Throughput.*?([\d\.]+)", text),
-                "MR Throughput (MMT)": re.search(r"MR Throughput.*?([\d\.]+)", text),
-                "KR Throughput (MMT)": re.search(r"KR Throughput.*?([\d\.]+)", text),
-                "BR Throughput (MMT)": re.search(r"BR Throughput.*?([\d\.]+)", text),
-                "Distillate Yield (%)": re.search(r"Distillate Yield.*?([\d\.]+)", text),
-                "HS crude (%)": re.search(r"HS crude.*?([\d\.]+)", text),
-                "Utilisation (%)": re.search(r"Utilisation.*?([\d\.]+)", text),
-                "Domestic Sales (MMT)": re.search(r"Domestic Sales.*?([\d\.]+)", text),
-                "LPG Sales (MMT)": re.search(r"LPG Sales.*?([\d\.]+)", text),
-                "MS Sales (MMT)": re.search(r"MS Sales.*?([\d\.]+)", text),
-                "HSD Sales (MMT)": re.search(r"HSD Sales.*?([\d\.]+)", text),
-                "SKO (MMT)": re.search(r"SKO.*?([\d\.]+)", text),
-                "ATF (MMT)": re.search(r"ATF.*?([\d\.]+)", text),
-                "Others (MMT)": re.search(r"Others.*?([\d\.]+)", text),
-                "Exports (MMT)": re.search(r"Exports.*?([\d\.]+)", text),
-                "Pipeline Throughput (MMT)": re.search(r"Pipeline.*?([\d\.]+)", text),
-                "Gross Margins ($/bbl)": re.search(r"Gross Margins.*?([\d\.]+)", text),
-                "Gross Margins - MR ($/bbl)": re.search(r"Gross Margins - MR.*?([\d\.]+)", text),
-                "Gross Margins - KR ($/bbl)": re.search(r"Gross Margins - KR.*?([\d\.]+)", text),
-                "Gross Margins - BR ($/bbl)": re.search(r"Gross Margins - BR.*?([\d\.]+)", text),
-                "Revenue from operations (₹ Crores)": re.search(r"Revenue from operations.*?₹\s*([\d,]+)", text),
-                "Cost of materials consumed (₹ Crores)": re.search(r"Cost of materials.*?₹\s*([\d,]+)", text),
-                "Purchase of stock-in-trade (₹ Crores)": re.search(r"Purchase of stock.*?₹\s*([\d,]+)", text),
-                "Change in inventories (₹ Crores)": re.search(r"Change in inventories.*?₹\s*([\d,]+)", text),
-                "PBT (₹ Crores)": re.search(r"PBT.*?₹\s*([\d,]+)", text),
-                "Domestic market share of POL": re.search(r"Domestic market share.*?([\d\.]+)", text),
-                "Retail Outlets": re.search(r"Retail Outlets.*?([\d,]+)", text),
-                "LPG Distributionship": re.search(r"LPG Distributorship.*?([\d,]+)", text),
-                "CNG facilities at ROs": re.search(r"CNG facilities.*?([\d,]+)", text),
-                "Aviation Service stations": re.search(r"Aviation Service.*?([\d,]+)", text),
-                "LPG Consumers (million)": re.search(r"LPG Consumers.*?([\d\.]+)", text)
-            }
+        # Extract from plain text for fields not in tables
+        text_data = {
+            "Sl.No": None,
+            "Company": "BPCL",
+            "Fiscal Year": re.search(r"Fiscal Year\s*:\s*(\d{4}-\d{4})", all_text),
+            "Quarter": re.search(r"Quarter\s*:\s*(Q[1-4])", all_text),
+            "Duration": re.search(r"Duration\s*:\s*(.*?)\n", all_text),
+            "Date": re.search(r"Date\s*:\s*([\d-]+)", all_text),
+            "MR Throughput (MMT)": re.search(r"MR Throughput.*?([\d\.]+)", all_text),
+            "KR Throughput (MMT)": re.search(r"KR Throughput.*?([\d\.]+)", all_text),
+            "BR Throughput (MMT)": re.search(r"BR Throughput.*?([\d\.]+)", all_text),
+            "HS crude (%)": re.search(r"HS crude.*?([\d\.]+)", all_text),
+            "Utilisation (%)": re.search(r"Utilisation.*?([\d\.]+)", all_text),
+            "Domestic Sales (MMT)": re.search(r"Domestic Sales.*?([\d\.]+)", all_text),
+            "LPG Sales (MMT)": re.search(r"LPG Sales.*?([\d\.]+)", all_text),
+            "MS Sales (MMT)": re.search(r"MS Sales.*?([\d\.]+)", all_text),
+            "HSD Sales (MMT)": re.search(r"HSD Sales.*?([\d\.]+)", all_text),
+            "Pipeline Throughput (MMT)": re.search(r"Pipeline Throughput.*?([\d\.]+)", all_text),
+            "Gross Margins ($/bbl)": re.search(r"Gross Margins.*?([\d\.]+)", all_text),
+            "Gross Margins - MR ($/bbl)": re.search(r"Gross Margins - MR.*?([\d\.]+)", all_text),
+            "Gross Margins - KR ($/bbl)": re.search(r"Gross Margins - KR.*?([\d\.]+)", all_text),
+            "Gross Margins - BR ($/bbl)": re.search(r"Gross Margins - BR.*?([\d\.]+)", all_text),
+            "Revenue from operations (₹ Crores)": re.search(r"Revenue from operations.*?₹\s*([\d,]+)", all_text),
+            "Cost of materials consumed (₹ Crores)": re.search(r"Cost of materials.*?₹\s*([\d,]+)", all_text),
+            "Purchase of stock-in-trade (₹ Crores)": re.search(r"Purchase of stock.*?₹\s*([\d,]+)", all_text),
+            "Change in inventories (₹ Crores)": re.search(r"Change in inventories.*?₹\s*([\d,]+)", all_text),
+            "PBT (₹ Crores)": re.search(r"PBT.*?₹\s*([\d,]+)", all_text),
+            "Domestic market share of POL": re.search(r"Domestic market share.*?([\d\.]+)", all_text),
+            "Retail Outlets": re.search(r"Retail Outlets.*?([\d,]+)", all_text),
+            "LPG Distributionship": re.search(r"LPG Distributorship.*?([\d,]+)", all_text),
+            "CNG facilities at ROs": re.search(r"CNG facilities.*?([\d,]+)", all_text),
+            "Aviation Service stations": re.search(r"Aviation Service.*?([\d,]+)", all_text),
+            "LPG Consumers (million)": re.search(r"LPG Consumers.*?([\d\.]+)", all_text)
+        }
 
-        elif company == "IOCL":
-            data = {
-                "Sl.No": None,
-                "Company": "IOCL",
-                "Fiscal Year": re.search(r"Fiscal Year\s*:\s*(\d{4}-\d{4})", text),
-                "Quarter": re.search(r"Quarter\s*:\s*(Q[1-4])", text),
-                "Duration": re.search(r"Duration\s*:\s*(.*?)\n", text),
-                "Date": re.search(r"Date\s*:\s*([\d-]+)", text),
-                "Crude Throughput (MMT)": re.search(r"Crude Throughput.*?([\d\.]+)", text),
-                "Utilisation (%)": re.search(r"Utilisation.*?([\d\.]+)", text),
-                "Distillate yield (%)": re.search(r"Distillate yield.*?([\d\.]+)", text),
-                "F&L (%)": re.search(r"F&L.*?([\d\.]+)", text),
-                "Domestic Sales (MMT)": re.search(r"Domestic Sales.*?([\d\.]+)", text),
-                "Exports (MMT)": re.search(r"Exports.*?([\d\.]+)", text),
-                "Pipeline Throughput (MMT)": re.search(r"Pipeline.*?([\d\.]+)", text),
-                "Gross Margins ($/bbl)": re.search(r"Gross Margins.*?([\d\.]+)", text),
-                "Revenue from operations (₹ Crores)": re.search(r"Revenue from operations.*?₹\s*([\d,]+)", text),
-                "Cost of material consumed (₹ Crores)": re.search(r"Cost of material.*?₹\s*([\d,]+)", text),
-                "Purchases of stock-in-trade (₹ Crores)": re.search(r"Purchases of stock.*?₹\s*([\d,]+)", text),
-                "Change in inventories (₹ Crores)": re.search(r"Change in inventories.*?₹\s*([\d,]+)", text),
-                "PBT (₹ Crores)": re.search(r"PBT.*?₹\s*([\d,]+)", text),
-                "Domestic market share of POL": re.search(r"Domestic market share.*?([\d\.]+)", text),
-                "Retail Outlets": re.search(r"Retail Outlets.*?([\d,]+)", text),
-                "LPG Distributionship": re.search(r"LPG Distributorship.*?([\d,]+)", text),
-                "SKO/LDO Dealership": re.search(r"SKO/LDO.*?([\d,]+)", text),
-                "Lube Distributors (Ind & Auto)": re.search(r"Lube Distributors.*?([\d,]+)", text),
-                "Mobile Dispensers": re.search(r"Mobile Dispensers.*?([\d,]+)", text),
-                "CNG facilities at ROs": re.search(r"CNG facilities.*?([\d,]+)", text),
-                "Aviation Fuel stations": re.search(r"Aviation Fuel.*?([\d,]+)", text),
-                "LPG Consumers (million)": re.search(r"LPG Consumers.*?([\d\.]+)", text),
-                "Russian crude %": re.search(r"Russian crude.*?([\d\.]+)", text)
-            }
-
-        elif company == "RIL":
-            data = {
-                "Sl.No": None,
-                "Company": "RIL",
-                "Fiscal Year": re.search(r"Fiscal Year\s*:\s*(\d{4}-\d{4})", text),
-                "Quarter": re.search(r"Quarter\s*:\s*(Q[1-4])", text),
-                "Duration": re.search(r"Duration\s*:\s*(.*?)\n", text),
-                "Date": re.search(r"Date\s*:\s*([\d-]+)", text),
-                "Crude Throughput (MMT)": re.search(r"Crude Throughput.*?([\d\.]+)", text),
-                "Utilisation (%)": re.search(r"Utilisation.*?([\d\.]+)", text),
-                "Total Sales (MMT)": re.search(r"Total Sales.*?([\d\.]+)", text),
-                "Gross Margins ($/bbl)": re.search(r"Gross Margins.*?([\d\.]+)", text),
-                "Revenue from operations (₹ Crores)": re.search(r"Revenue from operations.*?₹\s*([\d,]+)", text),
-                "Exports (₹ Crores)": re.search(r"Exports.*?₹\s*([\d,]+)", text),
-                "EBIDTA (₹ Crores)": re.search(r"EBIDTA.*?₹\s*([\d,]+)", text),
-                "EBIDTA %": re.search(r"EBIDTA %.*?([\d\.]+)", text),
-                "Retail outlets": re.search(r"Retail outlets.*?([\d,]+)", text),
-                "HSD Sales Y-o-Y (%)": re.search(r"HSD Sales.*?([\d\.]+)", text),
-                "MS Sales Y-o-Y (%)": re.search(r"MS Sales.*?([\d\.]+)", text),
-                "ATF sales (%)": re.search(r"ATF sales.*?([\d\.]+)", text),
-                "Charging points": re.search(r"Charging points.*?([\d,]+)", text),
-                "Unique sites": re.search(r"Unique sites.*?([\d,]+)", text),
-                "CBG Network": re.search(r"CBG Network.*?([\d,]+)", text)
-            }
-
-        clean_data = {}
-        for k, v in data.items():
-            if isinstance(v, str):
-                clean_data[k] = v
-            elif v:
-                clean_data[k] = v.group(1)
+        # Combine: prefer table data if present
+        combined = {}
+        for key in text_data.keys():
+            if key in table_data:
+                combined[key] = table_data[key]
             else:
-                clean_data[k] = None
+                v = text_data[key]
+                if isinstance(v, str):
+                    combined[key] = v
+                elif v:
+                    combined[key] = v.group(1)
+                else:
+                    combined[key] = None
 
-        return clean_data
+        return combined
 
-    hpcl_data, bpcl_data, iocl_data, ril_data = [], [], [], []
 
-    for f in hpcl_pdfs:
-        hpcl_data.append(parse_pdf(f, "HPCL"))
+    bpcl_rows = []
     for f in bpcl_pdfs:
-        bpcl_data.append(parse_pdf(f, "BPCL"))
-    for f in iocl_pdfs:
-        iocl_data.append(parse_pdf(f, "IOCL"))
-    for f in ril_pdfs:
-        ril_data.append(parse_pdf(f, "RIL"))
+        bpcl_rows.append(parse_bpcl_pdf(f))
 
-    hpcl_df = pd.DataFrame(hpcl_data)
-    bpcl_df = pd.DataFrame(bpcl_data)
-    iocl_df = pd.DataFrame(iocl_data)
-    ril_df = pd.DataFrame(ril_data)
-
-    hpcl_df["Sl.No"] = range(1, len(hpcl_df) + 1)
+    bpcl_df = pd.DataFrame(bpcl_rows)
     bpcl_df["Sl.No"] = range(1, len(bpcl_df) + 1)
-    iocl_df["Sl.No"] = range(1, len(iocl_df) + 1)
-    ril_df["Sl.No"] = range(1, len(ril_df) + 1)
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        hpcl_df.to_excel(writer, sheet_name="HPCL", index=False)
         bpcl_df.to_excel(writer, sheet_name="BPCL", index=False)
-        iocl_df.to_excel(writer, sheet_name="IOCL", index=False)
-        ril_df.to_excel(writer, sheet_name="RIL", index=False)
 
-    st.success("✅ Data extraction done! Download your Excel below.")
+    st.success("✅ Done! Download your BPCL Excel below.")
     st.download_button(
-        "📥 Download Combined Excel",
+        "📥 Download BPCL Excel",
         data=output.getvalue(),
-        file_name="OMCs_Quarterly_Data.xlsx",
+        file_name="BPCL_Quarterly_Data.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+else:
+    if process:
+        st.warning("Please upload at least one BPCL PDF.")
