@@ -10,8 +10,23 @@ st.title("📄 BPCL Quarterly PDF Data Extractor")
 
 st.write("""
 Upload BPCL quarterly PDF report(s).  
-This app will extract key performance indicators using **tables and plain text**, then generate a combined Excel file.
+This app extracts values from tables with multiple columns (Q4 FY18, Q4 FY17, FY18, FY17).  
+By default, we pick **first column after the label**.
 """)
+
+# Let user choose which column
+col_option = st.selectbox(
+    "📊 Which column to pick?",
+    ["Q4 FY18 (1st number)", "Q4 FY17 (2nd number)", "FY18 (3rd number)", "FY17 (4th number)"]
+)
+
+col_map = {
+    "Q4 FY18 (1st number)": 1,
+    "Q4 FY17 (2nd number)": 2,
+    "FY18 (3rd number)": 3,
+    "FY17 (4th number)": 4
+}
+col_idx = col_map[col_option]
 
 # Upload BPCL PDFs
 bpcl_pdfs = st.file_uploader("Upload BPCL PDF(s)", type=["pdf"], accept_multiple_files=True)
@@ -20,117 +35,72 @@ process = st.button("🚀 Process BPCL PDFs")
 
 if process and bpcl_pdfs:
 
-    def parse_bpcl_pdf(pdf_file):
-        all_text = ""
-        table_data = {}
+    def parse_bpcl_pdf(pdf_file, col_idx):
+        result = {"Company": "BPCL"}
 
         with pdfplumber.open(pdf_file) as pdf:
             for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    all_text += text + "\n"
-
-                # Find tables
                 tables = page.extract_tables()
                 for table in tables:
                     for row in table:
-                        # ✅ FULLY SAFE JOIN & TYPE HANDLING
-                        if row and isinstance(row, list):
-                            safe_cells = [str(cell) for cell in row if cell is not None]
-                            if not safe_cells:
-                                continue  # skip empty rows
-                            joined = " ".join(safe_cells).lower()
+                        if row is None: continue
+                        row = [cell for cell in row if cell]
 
-                            if "crude throughput" in joined:
-                                for cell in safe_cells:
-                                    m = re.search(r"([\d\.]+)", cell)
-                                    if m:
-                                        table_data["Crude Throughput (MMT)"] = m.group(1)
-                            if "distillate yield" in joined:
-                                for cell in safe_cells:
-                                    m = re.search(r"([\d\.]+)", cell)
-                                    if m:
-                                        table_data["Distillate Yield (%)"] = m.group(1)
-                            if "sko" in joined:
-                                for cell in safe_cells:
-                                    m = re.search(r"([\d\.]+)", cell)
-                                    if m:
-                                        table_data["SKO (MMT)"] = m.group(1)
-                            if "atf" in joined:
-                                for cell in safe_cells:
-                                    m = re.search(r"([\d\.]+)", cell)
-                                    if m:
-                                        table_data["ATF (MMT)"] = m.group(1)
-                            if "others" in joined:
-                                for cell in safe_cells:
-                                    m = re.search(r"([\d\.]+)", cell)
-                                    if m:
-                                        table_data["Others (MMT)"] = m.group(1)
-                            if "exports" in joined:
-                                for cell in safe_cells:
-                                    m = re.search(r"([\d\.]+)", cell)
-                                    if m:
-                                        table_data["Exports (MMT)"] = m.group(1)
+                        joined = " ".join(row).lower()
 
-        # Extract from plain text for other fields
-        text_data = {
-            "Sl.No": None,
-            "Company": "BPCL",
-            "Fiscal Year": re.search(r"Fiscal Year\s*:\s*(\d{4}-\d{4})", all_text),
-            "Quarter": re.search(r"Quarter\s*:\s*(Q[1-4])", all_text),
-            "Duration": re.search(r"Duration\s*:\s*(.*?)\n", all_text),
-            "Date": re.search(r"Date\s*:\s*([\d-]+)", all_text),
-            "MR Throughput (MMT)": re.search(r"MR Throughput.*?([\d\.]+)", all_text),
-            "KR Throughput (MMT)": re.search(r"KR Throughput.*?([\d\.]+)", all_text),
-            "BR Throughput (MMT)": re.search(r"BR Throughput.*?([\d\.]+)", all_text),
-            "HS crude (%)": re.search(r"HS crude.*?([\d\.]+)", all_text),
-            "Utilisation (%)": re.search(r"Utilisation.*?([\d\.]+)", all_text),
-            "Domestic Sales (MMT)": re.search(r"Domestic Sales.*?([\d\.]+)", all_text),
-            "LPG Sales (MMT)": re.search(r"LPG Sales.*?([\d\.]+)", all_text),
-            "MS Sales (MMT)": re.search(r"MS Sales.*?([\d\.]+)", all_text),
-            "HSD Sales (MMT)": re.search(r"HSD Sales.*?([\d\.]+)", all_text),
-            "Pipeline Throughput (MMT)": re.search(r"Pipeline Throughput.*?([\d\.]+)", all_text),
-            "Gross Margins ($/bbl)": re.search(r"Gross Margins[^$]*\$?.*?([\d\.]+)", all_text),
-            "Gross Margins - MR ($/bbl)": re.search(r"Gross Margins - MR[^$]*\$?.*?([\d\.]+)", all_text),
-            "Gross Margins - KR ($/bbl)": re.search(r"Gross Margins - KR[^$]*\$?.*?([\d\.]+)", all_text),
-            "Gross Margins - BR ($/bbl)": re.search(r"Gross Margins - BR[^$]*\$?.*?([\d\.]+)", all_text),
-            "Revenue from operations (₹ Crores)": re.search(r"Revenue from operations.*?₹\s*([\d,]+)", all_text),
-            "Cost of materials consumed (₹ Crores)": re.search(r"Cost of materials.*?₹\s*([\d,]+)", all_text),
-            "Purchase of stock-in-trade (₹ Crores)": re.search(r"Purchase of stock.*?₹\s*([\d,]+)", all_text),
-            "Change in inventories (₹ Crores)": re.search(r"Change in inventories.*?₹\s*([\d,]+)", all_text),
-            "PBT (₹ Crores)": re.search(r"PBT.*?₹\s*([\d,]+)", all_text),
-            "Domestic market share of POL": re.search(r"Domestic market share.*?([\d\.]+)", all_text),
-            "Retail Outlets": re.search(r"Retail Outlets.*?([\d,]+)", all_text),
-            "LPG Distributionship": re.search(r"LPG Distributorship.*?([\d,]+)", all_text),
-            "CNG facilities at ROs": re.search(r"CNG facilities.*?([\d,]+)", all_text),
-            "Aviation Service stations": re.search(r"Aviation Service.*?([\d,]+)", all_text),
-            "LPG Consumers (million)": re.search(r"LPG Consumers.*?([\d\.]+)", all_text)
-        }
+                        def get_value_if_match(prefixes):
+                            for p in prefixes:
+                                if joined.startswith(p.lower()):
+                                    if len(row) > col_idx:
+                                        return row[col_idx]
+                            return None
 
-        combined = {}
-        for key in text_data.keys():
-            if key in table_data and table_data[key] is not None:
-                combined[key] = table_data[key]
-            else:
-                v = text_data[key]
-                if isinstance(v, str):
-                    combined[key] = v
-                elif v:
-                    combined[key] = v.group(1)
-                else:
-                    combined[key] = None
+                        if val := get_value_if_match(["Refinery Crude Throughput MMT"]):
+                            result["Crude Throughput (MMT)"] = val
+                        if val := get_value_if_match(["- MR MMT", "MR MMT"]):
+                            result["MR Throughput (MMT)"] = val
+                        if val := get_value_if_match(["- KR MMT", "KR MMT"]):
+                            result["KR Throughput (MMT)"] = val
+                        if val := get_value_if_match(["Distillate Yield %"]):
+                            result["Distillate Yield (%)"] = val
+                        if val := get_value_if_match(["High Sulphur"]):
+                            result["HS crude (%)"] = val
+                        if val := get_value_if_match(["- LPG MMT"]):
+                            result["LPG Sales (MMT)"] = val
+                        if val := get_value_if_match(["- MS MMT"]):
+                            result["MS Sales (MMT)"] = val
+                        if val := get_value_if_match(["- HSD MMT"]):
+                            result["HSD Sales (MMT)"] = val
+                        if val := get_value_if_match(["- SKO MMT"]):
+                            result["SKO (MMT)"] = val
+                        if val := get_value_if_match(["- ATF MMT"]):
+                            result["ATF (MMT)"] = val
+                        if val := get_value_if_match(["- Others MMT"]):
+                            result["Others (MMT)"] = val
+                        if val := get_value_if_match(["b. Exports MMT"]):
+                            result["Exports (MMT)"] = val
+                        if val := get_value_if_match(["Total Domestic MMT"]):
+                            result["Domestic Sales (MMT)"] = val
+                        if val := get_value_if_match(["Total Sales MMT"]):
+                            result["Total Sales (MMT)"] = val
+                        if val := get_value_if_match(["GRM (BPCL) US"]):
+                            result["Gross Margins ($/bbl)"] = val
+                        if val := get_value_if_match(["GRM (Mumbai Refinery) US"]):
+                            result["Gross Margins - MR ($/bbl)"] = val
+                        if val := get_value_if_match(["GRM (Kochi Refinery) US"]):
+                            result["Gross Margins - KR ($/bbl)"] = val
 
-        return combined
+        return result
 
-    # Process all PDFs
+
     bpcl_rows = []
     for f in bpcl_pdfs:
-        bpcl_rows.append(parse_bpcl_pdf(f))
+        data = parse_bpcl_pdf(f, col_idx)
+        bpcl_rows.append(data)
 
     bpcl_df = pd.DataFrame(bpcl_rows)
-    bpcl_df["Sl.No"] = range(1, len(bpcl_df) + 1)
+    bpcl_df.insert(0, "Sl.No", range(1, len(bpcl_df)+1))
 
-    # Export to Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         bpcl_df.to_excel(writer, sheet_name="BPCL", index=False)
@@ -142,6 +112,7 @@ if process and bpcl_pdfs:
         file_name="BPCL_Quarterly_Data.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 else:
     if process:
-        st.warning("Please upload at least one BPCL PDF.")
+        st.warning("Upload at least one BPCL PDF.")
